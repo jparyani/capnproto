@@ -31,10 +31,30 @@ namespace _ {
 namespace {
 
 using Thing = test::TestMembrane::Thing;
+using ThingTwo = test::TestMembrane::ThingTwo;
 
 class ThingImpl: public Thing::Server {
 public:
   ThingImpl(kj::StringPtr text): text(text) {}
+
+protected:
+  kj::Promise<void> passThrough(PassThroughContext context) override {
+    context.getResults().setText(text);
+    return kj::READY_NOW;
+  }
+
+  kj::Promise<void> intercept(InterceptContext context) override {
+    context.getResults().setText(text);
+    return kj::READY_NOW;
+  }
+
+private:
+  kj::StringPtr text;
+};
+
+class ThingTwoImpl: public ThingTwo::Server {
+public:
+  ThingTwoImpl(kj::StringPtr text): text(text) {}
 
 protected:
   kj::Promise<void> passThrough(PassThroughContext context) override {
@@ -82,6 +102,18 @@ protected:
     }
   }
 
+  kj::Promise<void> callInterceptTwo(CallInterceptTwoContext context) override {
+    auto params = context.getParams();
+    auto req = params.getThing().castAs<ThingTwo>().interceptRequest();
+    if (params.getTailCall()) {
+      return context.tailCall(kj::mv(req));
+    } else {
+      return req.send().then([context](Response<test::TestMembrane::Result>&& result) mutable {
+        context.setResults(result);
+      });
+    }
+  }
+
   kj::Promise<void> loopback(LoopbackContext context) override {
     context.getResults().setThing(context.getParams().getThing());
     return kj::READY_NOW;
@@ -94,6 +126,8 @@ public:
                                             Capability::Client target) override {
     if (interfaceId == capnp::typeId<Thing>() && methodId == 1) {
       return Capability::Client(kj::heap<ThingImpl>("inbound"));
+    } else if (interfaceId == capnp::typeId<ThingTwo>() && methodId == 1) {
+      return Capability::Client(kj::heap<ThingTwoImpl>("inbound"));
     } else {
       return nullptr;
     }
@@ -103,6 +137,8 @@ public:
                                              Capability::Client target) override {
     if (interfaceId == capnp::typeId<Thing>() && methodId == 1) {
       return Capability::Client(kj::heap<ThingImpl>("outbound"));
+    } else if (interfaceId == capnp::typeId<ThingTwo>() && methodId == 1) {
+      return Capability::Client(kj::heap<ThingTwoImpl>("outbound"));
     } else {
       return nullptr;
     }
@@ -140,6 +176,12 @@ void testThingImpl(kj::WaitScope& waitScope, test::TestMembrane::Client membrane
   }
   {
     auto req = membraned.callInterceptRequest();
+    req.setThing(makeThing());
+    req.setTailCall(true);
+    KJ_EXPECT(req.send().wait(waitScope).getText() == remoteIntercept);
+  }
+  {
+    auto req = membraned.callInterceptTwoRequest();
     req.setThing(makeThing());
     req.setTailCall(true);
     KJ_EXPECT(req.send().wait(waitScope).getText() == remoteIntercept);

@@ -807,9 +807,15 @@ interface TestMembrane {
   makeThing @0 () -> (thing :Thing);
   callPassThrough @1 (thing :Thing, tailCall :Bool) -> Result;
   callIntercept @2 (thing :Thing, tailCall :Bool) -> Result;
+  callInterceptTwo @4 (thing :Thing, tailCall :Bool) -> Result;
   loopback @3 (thing :Thing) -> (thing :Thing);
 
   interface Thing {
+    passThrough @0 () -> Result;
+    intercept @1 () -> Result;
+  }
+
+  interface ThingTwo {
     passThrough @0 () -> Result;
     intercept @1 () -> Result;
   }
